@@ -4,14 +4,14 @@ An [MCP](https://modelcontextprotocol.io) server for [AlienVault OTX](https://ot
 
 ## What you get
 
-**25 tools** covering the OTX DirectConnect API v1 (16 read tools by default; the 9 write tools require `--read-write`):
+**29 tools** covering the OTX DirectConnect API v1 (20 read tools by default; the 9 write tools require `--read-write`):
 
 | Area | Tools |
 | --- | --- |
 | Search | `search_pulses`, `search_users` |
-| Pulses | `get_pulse_details`, `get_pulse_indicators`, `list_subscribed_pulses`, `list_pulse_activity`, `get_pulse_events`, `create_pulse`, `subscribe_pulse`, `unsubscribe_pulse` |
+| Pulses | `get_pulse_details`, `get_pulse_indicators`, `get_related_pulses`, `search_related_pulses`, `get_subscribed_pulse_ids`, `list_subscribed_pulses`, `list_pulse_activity`, `get_pulse_events`, `create_pulse`, `subscribe_pulse`, `unsubscribe_pulse` |
 | Indicators | `get_indicator_details`, `validate_indicator`, `list_indicator_types`, `export_indicators` |
-| Users | `get_user`, `list_user_pulses`, `list_my_pulses`, `subscribe_user`, `unsubscribe_user`, `follow_user`, `unfollow_user` |
+| Users | `get_user`, `get_current_user`, `list_user_pulses`, `list_my_pulses`, `subscribe_user`, `unsubscribe_user`, `follow_user`, `unfollow_user` |
 | Submissions | `submit_url`, `submit_urls`, `list_submitted_urls`, `list_submitted_files` |
 
 **2 resource templates**: `otx://pulse/{pulse_id}` and `otx://indicator/{type}/{value}`.
@@ -30,7 +30,7 @@ All tools return structured JSON. Long lists are capped at 50 entries with the A
 
 ### API coverage notes
 
-- Destructive account operations (`edit_pulse`, `delete_pulse`, `clone_pulse`, `submit_file` binary upload) are implemented on `otx_mcp.api.client.OTXClient` but **not** exposed as MCP tools, so an LLM can't delete or rewrite your pulses by accident. Call the client directly from Python if you need them.
+- Account operations kept client-only (not exposed as MCP tools): `edit_pulse`, `delete_pulse`, `clone_pulse`, `submit_file` (binary upload), `update_submitted_urls_tlp`, `update_submitted_files_tlp`. Call `otx_mcp.api.client.OTXClient` directly from Python if you need them, so an LLM can't delete or rewrite your pulses by accident.
 - The OTX API is slow on some endpoints (`passive_dns`, `pulses/subscribed` regularly take 20–60 s); the client uses a 60 s timeout.
 
 ## Installation
@@ -104,7 +104,7 @@ OTX_MCP_BEARER_TOKEN=s3cret otx-mcp --transport streamable-http --host 0.0.0.0 -
 # client side: pass headers={"Authorization": "Bearer s3cret"} to streamable_http_client
 ```
 
-**Read-only mode (default).** The server starts with only the 16 read tools; the 9 tools that mutate your OTX account (`create_pulse`, `subscribe_*`, `unfollow_*`, `follow_*`, `submit_url*`) are omitted. Pass `--read-write` (or set `OTX_MCP_READ_WRITE=1`) when you actually want them — think hard before combining read-write with an LLM client you don't fully control.
+**Read-only mode (default).** The server starts with only the 20 read tools; the 9 tools that mutate your OTX account (`create_pulse`, `subscribe_*`, `unfollow_*`, `follow_*`, `submit_url*`) are omitted. Pass `--read-write` (or set `OTX_MCP_READ_WRITE=1`) when you actually want them — think hard before combining read-write with an LLM client you don't fully control.
 
 **Prompt-injection caveat.** OTX pulse/indicator descriptions are community-authored text that flows into the model's context. The server's instructions tell the model to treat it as data, but treat write-tool output from a read-heavy session with suspicion.
 

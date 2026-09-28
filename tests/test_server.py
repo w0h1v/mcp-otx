@@ -12,13 +12,14 @@ EXPECTED_TOOLS = {
     "search_pulses", "search_users",
     # pulses
     "get_pulse_details", "get_pulse_indicators", "list_subscribed_pulses",
-    "list_pulse_activity", "get_pulse_events", "create_pulse",
+    "list_pulse_activity", "get_pulse_events", "get_related_pulses",
+    "search_related_pulses", "get_subscribed_pulse_ids", "create_pulse",
     "subscribe_pulse", "unsubscribe_pulse",
     # indicators
     "get_indicator_details", "validate_indicator", "list_indicator_types",
     "export_indicators",
     # users
-    "get_user", "list_user_pulses", "list_my_pulses", "subscribe_user",
+    "get_user", "get_current_user", "list_user_pulses", "list_my_pulses", "subscribe_user",
     "unsubscribe_user", "follow_user", "unfollow_user",
     # submissions
     "submit_url", "submit_urls", "list_submitted_urls", "list_submitted_files",

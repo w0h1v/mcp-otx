@@ -277,16 +277,78 @@ class OTXClient:
         return await self.post(f"/pulses/{self._seg(pulse_id)}/delete")
 
     async def subscribe_pulse(self, pulse_id: str) -> Any:
-        return await self.post(f"/pulses/{self._seg(pulse_id)}/subscribe")
+        return await self.get(f"/pulses/{self._seg(pulse_id)}/subscribe")
 
     async def unsubscribe_pulse(self, pulse_id: str) -> Any:
-        return await self.post(f"/pulses/{self._seg(pulse_id)}/unsubscribe")
+        return await self.get(f"/pulses/{self._seg(pulse_id)}/unsubscribe")
 
     async def clone_pulse(self, pulse_id: str, new_name: str | None = None) -> Any:
         return await self.post(
             f"/pulses/{self._seg(pulse_id)}/clone",
             {"name": new_name} if new_name else None,
         )
+
+    async def get_current_user(self) -> dict[str, Any]:
+        """Get the authenticated user's own profile (whoami)."""
+        return await self.get("/user/me")
+
+    async def get_subscribed_pulse_ids(
+        self, limit: int = 500, page: int = 1
+    ) -> dict[str, Any]:
+        """Get just the pulse IDs from your subscriptions (lightweight sync)."""
+        return await self.get(
+            "/pulses/subscribed_pulse_ids", **self._page_params(limit, page)
+        )
+
+    async def get_related_pulses(
+        self, pulse_id: str, limit: int = 10, page: int = 1
+    ) -> dict[str, Any]:
+        """Get pulses that share an indicator with the given pulse."""
+        return await self.get(
+            f"/pulses/{self._seg(pulse_id)}/related", **self._page_params(limit, page)
+        )
+
+    async def search_related_pulses(
+        self,
+        pulse_id: str | None = None,
+        malware_family: str | None = None,
+        adversary: str | None = None,
+        limit: int = 10,
+        page: int = 1,
+    ) -> dict[str, Any]:
+        """Find pulses related to a pulse, malware family, or adversary.
+
+        Exactly one of pulse_id / malware_family / adversary must be given
+        (enforced by the API and validated here).
+        """
+        supplied = [v for v in (pulse_id, malware_family, adversary) if v]
+        if len(supplied) != 1:
+            raise OTXAPIError(
+                "Exactly one of pulse_id, malware_family or adversary is required."
+            )
+        return await self.get(
+            "/pulses/related",
+            pulse_id=pulse_id,
+            malware_family=malware_family,
+            adversary=adversary,
+            **self._page_params(limit, page),
+        )
+
+    async def update_submitted_urls_tlp(self, urls: list[str], tlp: str) -> Any:
+        """Change the TLP of URLs you previously submitted (own submissions only)."""
+        if tlp not in ("white", "green", "amber", "red"):
+            raise OTXAPIError("tlp must be one of: white, green, amber, red")
+        return await self.post("/indicators/update_submitted_urls_tlp", {"urls": urls, "tlp": tlp})
+
+    async def update_submitted_files_tlp(self, files: list[str], tlp: str) -> Any:
+        """Change the TLP of files you previously submitted (own submissions only).
+
+        The official doc's schema block for this route repeats the URLs
+        variant's "urls" key; the semantic key here is the file hash list.
+        """
+        if tlp not in ("white", "green", "amber", "red"):
+            raise OTXAPIError("tlp must be one of: white, green, amber, red")
+        return await self.post("/indicators/update_submitted_files_tlp", {"files": files, "tlp": tlp})
 
     # ------------------------------------------------------------------ users
 
@@ -305,16 +367,16 @@ class OTXClient:
         return await self.get("/pulses/my", **self._page_params(limit, page))
 
     async def subscribe_user(self, username: str) -> Any:
-        return await self.post(f"/users/{self._seg(username)}/subscribe")
+        return await self.get(f"/users/{self._seg(username)}/subscribe")
 
     async def unsubscribe_user(self, username: str) -> Any:
-        return await self.post(f"/users/{self._seg(username)}/unsubscribe")
+        return await self.get(f"/users/{self._seg(username)}/unsubscribe")
 
     async def follow_user(self, username: str) -> Any:
-        return await self.post(f"/users/{self._seg(username)}/follow")
+        return await self.get(f"/users/{self._seg(username)}/follow")
 
     async def unfollow_user(self, username: str) -> Any:
-        return await self.post(f"/users/{self._seg(username)}/unfollow")
+        return await self.get(f"/users/{self._seg(username)}/unfollow")
 
     # ----------------------------------------------------------------- search
 

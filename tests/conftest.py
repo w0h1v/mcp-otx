@@ -73,9 +73,9 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"count": 0, "results": []})
     if path == "/api/v1/pulses/my":
         return httpx.Response(200, json={"count": 0, "results": []})
-    if path == "/api/v1/users/alice/subscribe":
+    if path == "/api/v1/users/alice/subscribe" and request.method == "GET":
         return httpx.Response(200, json={"subscribed": True})
-    if path == "/api/v1/pulses/abc123/subscribe":
+    if path == "/api/v1/pulses/abc123/subscribe" and request.method == "GET":
         return httpx.Response(200, json={"subscribed": True})
     if path == "/api/v1/indicators/submit_url":
         return httpx.Response(200, json={"url": json.loads(request.content)["url"]})
@@ -91,6 +91,26 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"indicator": "https://example.com/a path?q=1"})
     if path == "/api/v1/pulses/abc123" and request.method == "PATCH":
         return httpx.Response(200, json={"id": "abc123", "patched": True})
+    if path == "/api/v1/user/me":
+        return httpx.Response(200, json={"user_id": 6755, "username": "self"})
+    if path == "/api/v1/pulses/subscribed_pulse_ids":
+        return httpx.Response(200, json={
+            "results": ["546ce8eb11d40838dc6e43f1"], "count": 42, "next": None,
+        })
+    if path == "/api/v1/pulses/abc123/related":
+        return httpx.Response(200, json={
+            "count": 1, "results": [{"id": "def456", "name": "Related"}],
+        })
+    if path == "/api/v1/pulses/related":
+        supplied = [k for k in ("pulse_id", "malware_family", "adversary") if k in params]
+        assert len(supplied) == 1, "API contract: exactly one selector"
+        return httpx.Response(200, json={
+            "count": 1, "results": [{"id": "rel789", "matched_on": supplied[0]}],
+        })
+    if path == "/api/v1/indicators/update_submitted_urls_tlp":
+        body = json.loads(request.content)
+        assert set(body) == {"urls", "tlp"} and body["tlp"] in ("white", "green", "amber", "red")
+        return httpx.Response(200, json={"updated": len(body["urls"])})
     if path == "/api/v1/pulses/abc123/clone" and request.method == "POST":
         assert json.loads(request.content) == {"name": "renamed"}
         return httpx.Response(200, json={"id": "clone123", "name": "renamed"})

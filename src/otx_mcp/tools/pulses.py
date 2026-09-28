@@ -116,6 +116,77 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
             raise ToolError(str(e)) from e
         return deep_trim(data)
 
+    @mcp.tool()
+    async def get_related_pulses(
+        pulse_id: str, limit: int = 10, page: int = 1
+    ) -> dict[str, Any]:
+        """Get pulses that share indicators (IOCs) with the given pulse.
+
+        Args:
+            pulse_id: 24-character hex pulse ID.
+            limit: Results per page (1-500).
+            page: 1-based page number.
+
+        Returns:
+            Paginated related pulses.
+        """
+        try:
+            data = await client.get_related_pulses(pulse_id, limit, page)
+        except OTXAPIError as e:
+            raise ToolError(str(e)) from e
+        return deep_trim(data)
+
+    @mcp.tool()
+    async def search_related_pulses(
+        pulse_id: str | None = None,
+        malware_family: str | None = None,
+        adversary: str | None = None,
+        limit: int = 10,
+        page: int = 1,
+    ) -> dict[str, Any]:
+        """Find pulses related to a pulse, malware family, or adversary.
+
+        Pass exactly ONE of pulse_id, malware_family or adversary. For a
+        pulse, returns other pulses sharing some of the same IOCs; for a
+        malware family or adversary, returns pulses tagged with it.
+
+        Args:
+            pulse_id: Pulse to find related pulses for.
+            malware_family: Malware family name (e.g. "trickbot").
+            adversary: Adversary name (e.g. "Equation Group").
+            limit: Results per page (1-500).
+            page: 1-based page number.
+
+        Returns:
+            Paginated related pulses.
+        """
+        try:
+            data = await client.search_related_pulses(
+                pulse_id, malware_family, adversary, limit, page
+            )
+        except OTXAPIError as e:
+            raise ToolError(str(e)) from e
+        return deep_trim(data)
+
+    @mcp.tool()
+    async def get_subscribed_pulse_ids(
+        limit: int = 500, page: int = 1
+    ) -> dict[str, Any]:
+        """Get just the IDs of your subscribed pulses (lightweight sync).
+
+        Args:
+            limit: Results per page (1-500).
+            page: 1-based page number.
+
+        Returns:
+            Paginated pulse-ID list.
+        """
+        try:
+            data = await client.get_subscribed_pulse_ids(limit, page)
+        except OTXAPIError as e:
+            raise ToolError(str(e)) from e
+        return deep_trim(data)
+
     if read_only:
         return
 

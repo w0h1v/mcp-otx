@@ -186,3 +186,34 @@ def test_deep_trim_truncates_strings():
     assert out["whois"].startswith("A" * 4000)
     assert "[truncated, 9000 chars total]" in out["whois"]
     assert deep_trim("short") == "short"
+
+
+async def test_get_current_user(client):
+    me = await client.get_current_user()
+    assert me["username"] == "self"
+
+
+async def test_subscribed_pulse_ids(client):
+    data = await client.get_subscribed_pulse_ids()
+    assert data["count"] == 42
+    assert data["results"] == ["546ce8eb11d40838dc6e43f1"]
+
+
+async def test_get_related_pulses(client):
+    data = await client.get_related_pulses("abc123")
+    assert data["results"][0]["name"] == "Related"
+
+
+async def test_search_related_pulses_requires_exactly_one_selector(client):
+    with pytest.raises(OTXAPIError, match="Exactly one"):
+        await client.search_related_pulses()
+    with pytest.raises(OTXAPIError, match="Exactly one"):
+        await client.search_related_pulses(pulse_id="abc", adversary="APT1")
+    data = await client.search_related_pulses(malware_family="trickbot")
+    assert data["results"][0]["matched_on"] == "malware_family"
+
+
+async def test_update_submitted_urls_tlp(client):
+    assert await client.update_submitted_urls_tlp(["https://x.example/"], "green") == {"updated": 1}
+    with pytest.raises(OTXAPIError, match="tlp"):
+        await client.update_submitted_urls_tlp(["https://x.example/"], "orange")
