@@ -1,5 +1,10 @@
 # otx-mcp
 
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![MCP SDK 2.x](https://img.shields.io/badge/MCP%20SDK-2.x-purple)
+![Status](https://img.shields.io/badge/status-production-brightgreen)
+
 An [MCP](https://modelcontextprotocol.io) server for [AlienVault OTX](https://otx.alienvault.com) (Open Threat Exchange, now LevelBlue) threat intelligence — full API coverage, stdio **and** streamable HTTP transports, built on the MCP Python SDK 2.x.
 
 ## What you get
