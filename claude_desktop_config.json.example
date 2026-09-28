@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "otx": {
+      "command": "/absolute/path/to/mcp-otx/.venv/bin/otx-mcp",
+      "env": {
+        "OTX_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
