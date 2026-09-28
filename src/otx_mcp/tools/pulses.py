@@ -8,7 +8,7 @@ from otx_mcp.api.client import OTXClient
 from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
 
 
-def register_pulse_tools(client: OTXClient, mcp: Any) -> None:
+def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -> None:
     @mcp.tool()
     async def get_pulse_details(pulse_id: str) -> dict[str, Any]:
         """Get full details of an OTX pulse by ID.
@@ -75,16 +75,11 @@ def register_pulse_tools(client: OTXClient, mcp: Any) -> None:
 
     @mcp.tool()
     async def list_pulse_activity(
-        types: str | None = None,
-        limit: int = 10,
-        page: int = 1,
-        modified_since: str | None = None,
+        limit: int = 10, page: int = 1, modified_since: str | None = None
     ) -> dict[str, Any]:
         """List the latest pulses across the whole OTX community.
 
         Args:
-            types: Comma-separated pulse threat types to filter by (e.g.
-                "malware,botnet,phishing"); omit for all.
             limit: Results per page (1-500).
             page: 1-based page number.
             modified_since: ISO 8601 timestamp cutoff.
@@ -93,26 +88,21 @@ def register_pulse_tools(client: OTXClient, mcp: Any) -> None:
             Paginated activity-stream pulses.
         """
         try:
-            data = await client.list_pulse_activity(types, limit, page, modified_since)
+            data = await client.list_pulse_activity(limit, page, modified_since)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
         return deep_trim(data)
 
     @mcp.tool()
     async def get_pulse_events(
-        action: str | None = None,
-        limit: int = 10,
-        page: int = 1,
-        modified_since: str | None = None,
+        limit: int = 10, page: int = 1, modified_since: str | None = None
     ) -> dict[str, Any]:
         """List events from your subscription stream (pulse lifecycle changes).
 
-        Useful for incremental sync: reports pulses added, edited, deleted or
-        unsubscribed from your stream.
+        Useful for incremental sync: each event carries an `action` field
+        (e.g. remove_pulse) naming what happened to which pulse.
 
         Args:
-            action: Filter by event action (e.g. "added", "edited",
-                "deleted", "removed").
             limit: Results per page (1-500).
             page: 1-based page number.
             modified_since: ISO 8601 timestamp cutoff.
@@ -121,10 +111,13 @@ def register_pulse_tools(client: OTXClient, mcp: Any) -> None:
             Paginated subscription-stream events.
         """
         try:
-            data = await client.get_pulse_events(action, limit, page, modified_since)
+            data = await client.get_pulse_events(limit, page, modified_since)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
         return deep_trim(data)
+
+    if read_only:
+        return
 
     @mcp.tool()
     async def create_pulse(

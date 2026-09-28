@@ -25,7 +25,10 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
             "results": [{"username": "alice", "subscriber_count": 5}]
         })
-    if path == "/api/v1/pulses/abc123":
+    if path == "/api/v1/pulses/abc123" and request.method == "GET":
+        # Query-injection guard: an unencoded '?' in pulse_id would land here
+        # as query params instead of inside the encoded path segment.
+        assert "x" not in params
         return httpx.Response(200, json={
             "id": "abc123", "name": "Test pulse",
             "indicators": [{"type": "IPv4", "indicator": "8.8.8.8"}],
@@ -47,9 +50,10 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
             "detail": [{"name": "IPv4", "slug": "ip", "description": "An IPv4 address"}]
         })
-    if path == "/api/v1/pulses/indicators/validate":
-        assert params.get("indicator") == "8.8.8.8"
-        return httpx.Response(200, json={"access_type": "public"})
+    if path == "/api/v1/pulses/indicators/validate" and request.method == "POST":
+        body = json.loads(request.content)
+        assert body["indicator"] == "8.8.8.8" and body["type"] == "IPv4"
+        return httpx.Response(200, json={"access_type": "public", "status": "success"})
     if path == "/api/v1/pulses/create":
         body = json.loads(request.content)
         return httpx.Response(200, json={"id": "newpulse", "name": body["name"]})
@@ -79,6 +83,17 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"count": 0, "results": []})
     if path == "/api/v1/indicators/IPv4/1.2.3.4/general":
         return httpx.Response(404, json={"detail": "not found"})
+    raw_path = request.url.raw_path.split(b"?")[0].decode("ascii")
+    if raw_path == "/api/v1/indicators/url/https%3A%2F%2Fexample.com%2Fa%20path%3Fq%3D1/general":
+        # Matches ONLY when the value was percent-encoded into a single
+        # segment: raw_path keeps the %3F. An unencoded value splits into
+        # path + query and misses this route.
+        return httpx.Response(200, json={"indicator": "https://example.com/a path?q=1"})
+    if path == "/api/v1/pulses/abc123" and request.method == "PATCH":
+        return httpx.Response(200, json={"id": "abc123", "patched": True})
+    if path == "/api/v1/pulses/abc123/clone" and request.method == "POST":
+        assert json.loads(request.content) == {"name": "renamed"}
+        return httpx.Response(200, json={"id": "clone123", "name": "renamed"})
     return httpx.Response(404, json={"detail": f"endpoint not found: {path}"})
 
 

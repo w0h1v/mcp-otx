@@ -8,7 +8,7 @@ from otx_mcp.api.client import OTXClient
 from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
 
 
-def register_user_tools(client: OTXClient, mcp: Any) -> None:
+def register_user_tools(client: OTXClient, mcp: Any, read_only: bool = False) -> None:
     @mcp.tool()
     async def get_user(username: str, detailed: bool = True) -> dict[str, Any]:
         """Get an OTX user's profile.
@@ -61,6 +61,9 @@ def register_user_tools(client: OTXClient, mcp: Any) -> None:
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
         return deep_trim(data)
+
+    if read_only:
+        return
 
     @mcp.tool()
     async def subscribe_user(username: str) -> dict[str, Any]:

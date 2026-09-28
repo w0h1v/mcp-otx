@@ -57,6 +57,8 @@ cp .env.example .env   # and put your key in it
 | `OTX_MCP_TRANSPORT` | `stdio` | Default transport: `stdio`, `streamable-http`, `sse` |
 | `OTX_MCP_HOST` | `127.0.0.1` | HTTP bind host |
 | `OTX_MCP_PORT` | `8000` | HTTP bind port |
+| `OTX_MCP_READ_ONLY` | off | `1` registers only read tools |
+| `OTX_MCP_BEARER_TOKEN` | off | Require `Authorization: Bearer <token>` on HTTP transports |
 
 ## Running
 
@@ -87,16 +89,37 @@ otx-mcp --transport streamable-http --host 127.0.0.1 --port 8000
 # → http://127.0.0.1:8000/mcp
 ```
 
-Options: `--json-response` (plain JSON instead of SSE streams), `--stateless-http` (session per request), and legacy `--transport sse` if a client still needs it. There is no built-in auth on the HTTP endpoint — bind to localhost or front it with a proxy if the host is shared.
+Options: `--json-response` (plain JSON instead of SSE streams), `--stateless-http` (session per request), and legacy `--transport sse` if a client still needs it.
+
+**HTTP transport security.** The tools act as your OTX account, so binding them to a network interface is dangerous. Defaults protect you:
+
+- Localhost binds (`127.0.0.1`, the default) are fine as-is.
+- Binding any other host **requires** one of:
+  - `OTX_MCP_BEARER_TOKEN=<secret>` — clients must send `Authorization: Bearer <secret>` or get `401`, or
+  - `--allow-remote` — explicit opt-in to an unauthenticated endpoint (loudly warned).
+
+```bash
+OTX_MCP_BEARER_TOKEN=s3cret otx-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+# client side: pass headers={"Authorization": "Bearer s3cret"} to streamable_http_client
+```
+
+**Read-only mode.** `--read-only` (or `OTX_MCP_READ_ONLY=1`) registers only the 16 read tools and drops every tool that mutates your OTX account (`create_pulse`, `subscribe_*`, `follow_*`, `submit_url*`) — recommended when exposing the server to an LLM you don't fully control.
+
+**Prompt-injection caveat.** OTX pulse/indicator descriptions are community-authored text that flows into the model's context. The server's instructions tell the model to treat it as data, but treat write-tool output from a read-heavy session with suspicion.
 
 Example remote client:
 
 ```python
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-async with streamable_http_client("http://127.0.0.1:8000/mcp") as (read, write, _):
-    async with ClientSession(read, write) as session:
+# Long read timeouts matter: OTX endpoints like pulses/events and passive_dns
+# can take 10-60s, and the default client read timeout is ~5s.
+http = httpx2.AsyncClient(timeout=httpx2.Timeout(30.0, read=120.0))
+
+async with streamable_http_client("http://127.0.0.1:8000/mcp", http_client=http) as (read, write):
+    async with ClientSession(read, write, read_timeout_seconds=120.0) as session:
         await session.initialize()
         result = await session.call_tool(
             "get_indicator_details",
