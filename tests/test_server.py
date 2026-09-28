@@ -27,7 +27,7 @@ EXPECTED_TOOLS = {
 
 @pytest.fixture
 async def server(client):
-    return create_server(client=client)
+    return create_server(client=client, read_only=False)
 
 
 async def test_all_tools_registered(server):
@@ -43,6 +43,21 @@ async def test_read_only_mode_registers_no_write_tools(client):
     assert tools == EXPECTED_TOOLS - WRITE_TOOL_NAMES
     assert not (tools & WRITE_TOOL_NAMES)
     assert "READ-ONLY" in ro.description
+
+
+async def test_read_only_is_the_default(client):
+    from otx_mcp.server import WRITE_TOOL_NAMES, create_server
+
+    default = create_server(client=client)  # no explicit read_only
+    tools = {t.name for t in await default.list_tools()}
+    assert tools == EXPECTED_TOOLS - WRITE_TOOL_NAMES
+
+
+def test_read_write_flag_parses():
+    from otx_mcp.server import parse_args
+
+    assert parse_args([]).read_write is False
+    assert parse_args(["--read-write"]).read_write is True
 
 
 async def test_bearer_middleware_rejects_missing_or_wrong_token():

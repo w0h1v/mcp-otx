@@ -4,7 +4,7 @@ An [MCP](https://modelcontextprotocol.io) server for [AlienVault OTX](https://ot
 
 ## What you get
 
-**25 tools** covering the OTX DirectConnect API v1:
+**25 tools** covering the OTX DirectConnect API v1 (16 read tools by default; the 9 write tools require `--read-write`):
 
 | Area | Tools |
 | --- | --- |
@@ -57,7 +57,7 @@ cp .env.example .env   # and put your key in it
 | `OTX_MCP_TRANSPORT` | `stdio` | Default transport: `stdio`, `streamable-http`, `sse` |
 | `OTX_MCP_HOST` | `127.0.0.1` | HTTP bind host |
 | `OTX_MCP_PORT` | `8000` | HTTP bind port |
-| `OTX_MCP_READ_ONLY` | off | `1` registers only read tools |
+| `OTX_MCP_READ_WRITE` | off | `1` exposes account-mutating tools (read-only is the default) |
 | `OTX_MCP_BEARER_TOKEN` | off | Require `Authorization: Bearer <token>` on HTTP transports |
 
 ## Running
@@ -65,8 +65,9 @@ cp .env.example .env   # and put your key in it
 ### stdio (Claude Desktop, Cline, Claude Code, ...)
 
 ```bash
-otx-mcp                          # or: python -m otx_mcp
-otx-mcp --transport stdio        # explicit
+otx-mcp                          # or: python -m otx_mcp (read-only by default)
+otx-mcp --read-write             # include account-mutating tools
+otx-mcp --transport stdio        # explicit transport
 ```
 
 Client configuration (Claude Desktop `claude_desktop_config.json`):
@@ -103,7 +104,7 @@ OTX_MCP_BEARER_TOKEN=s3cret otx-mcp --transport streamable-http --host 0.0.0.0 -
 # client side: pass headers={"Authorization": "Bearer s3cret"} to streamable_http_client
 ```
 
-**Read-only mode.** `--read-only` (or `OTX_MCP_READ_ONLY=1`) registers only the 16 read tools and drops every tool that mutates your OTX account (`create_pulse`, `subscribe_*`, `follow_*`, `submit_url*`) — recommended when exposing the server to an LLM you don't fully control.
+**Read-only mode (default).** The server starts with only the 16 read tools; the 9 tools that mutate your OTX account (`create_pulse`, `subscribe_*`, `unfollow_*`, `follow_*`, `submit_url*`) are omitted. Pass `--read-write` (or set `OTX_MCP_READ_WRITE=1`) when you actually want them — think hard before combining read-write with an LLM client you don't fully control.
 
 **Prompt-injection caveat.** OTX pulse/indicator descriptions are community-authored text that flows into the model's context. The server's instructions tell the model to treat it as data, but treat write-tool output from a read-heavy session with suspicion.
 

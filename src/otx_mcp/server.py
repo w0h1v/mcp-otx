@@ -78,14 +78,16 @@ class BearerAuthMiddleware:
             return
         await self.app(scope, receive, send)  # type: ignore[operator]
 
-def create_server(client: OTXClient | None = None, read_only: bool = False) -> MCPServer:
+def create_server(client: OTXClient | None = None, read_only: bool = True) -> MCPServer:
     """Create the MCPServer with all OTX tools and resources registered.
 
     Args:
         client: Pre-built OTXClient (e.g. a test double). A real one is
             created from the environment when omitted.
         read_only: Register only read tools; omit every tool that changes
-            the OTX account (create/subscribe/follow/submit).
+            the OTX account (create/subscribe/follow/submit). Defaults to
+            True — pass read_only=False (or run `otx-mcp --read-write`)
+            to expose write tools.
     """
     owns_client = client is None
     if client is None:
@@ -157,11 +159,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Run streamable-http in stateless mode (one session per request)",
     )
     parser.add_argument(
-        "--read-only",
+        "--read-write",
         action="store_true",
-        default=os.getenv("OTX_MCP_READ_ONLY", "").lower() in ("1", "true", "yes"),
-        help="Expose only read tools; no create/subscribe/follow/submit "
-        "(env: OTX_MCP_READ_ONLY)",
+        default=os.getenv("OTX_MCP_READ_WRITE", "").lower() in ("1", "true", "yes"),
+        help="Expose account-mutating tools (create/subscribe/follow/submit). "
+        "The server is READ-ONLY by default (env: OTX_MCP_READ_WRITE)",
     )
     parser.add_argument(
         "--allow-remote",
@@ -221,7 +223,13 @@ def main(argv: list[str] | None = None) -> None:
                 file=sys.stderr,
             )
 
-    server = create_server(read_only=args.read_only)
+    server = create_server(read_only=not args.read_write)
+    if not args.read_write:
+        print(
+            "otx-mcp: running READ-ONLY (default). Pass --read-write or set "
+            "OTX_MCP_READ_WRITE=1 to expose account-mutating tools.",
+            file=sys.stderr,
+        )
     if args.transport == "stdio":
         server.run(transport="stdio")
     else:
