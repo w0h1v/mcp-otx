@@ -25,7 +25,10 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
             "results": [{"username": "alice", "subscriber_count": 5}]
         })
-    if path == "/api/v1/pulses/abc123":
+    if path == "/api/v1/pulses/abc123" and request.method == "GET":
+        # Query-injection guard: an unencoded '?' in pulse_id would land here
+        # as query params instead of inside the encoded path segment.
+        assert "x" not in params
         return httpx.Response(200, json={
             "id": "abc123", "name": "Test pulse",
             "indicators": [{"type": "IPv4", "indicator": "8.8.8.8"}],
@@ -47,9 +50,10 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={
             "detail": [{"name": "IPv4", "slug": "ip", "description": "An IPv4 address"}]
         })
-    if path == "/api/v1/pulses/indicators/validate":
-        assert params.get("indicator") == "8.8.8.8"
-        return httpx.Response(200, json={"access_type": "public"})
+    if path == "/api/v1/pulses/indicators/validate" and request.method == "POST":
+        body = json.loads(request.content)
+        assert body["indicator"] == "8.8.8.8" and body["type"] == "IPv4"
+        return httpx.Response(200, json={"access_type": "public", "status": "success"})
     if path == "/api/v1/pulses/create":
         body = json.loads(request.content)
         return httpx.Response(200, json={"id": "newpulse", "name": body["name"]})
@@ -69,9 +73,9 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"count": 0, "results": []})
     if path == "/api/v1/pulses/my":
         return httpx.Response(200, json={"count": 0, "results": []})
-    if path == "/api/v1/users/alice/subscribe":
+    if path == "/api/v1/users/alice/subscribe" and request.method == "GET":
         return httpx.Response(200, json={"subscribed": True})
-    if path == "/api/v1/pulses/abc123/subscribe":
+    if path == "/api/v1/pulses/abc123/subscribe" and request.method == "GET":
         return httpx.Response(200, json={"subscribed": True})
     if path == "/api/v1/indicators/submit_url":
         return httpx.Response(200, json={"url": json.loads(request.content)["url"]})
@@ -79,6 +83,37 @@ def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"count": 0, "results": []})
     if path == "/api/v1/indicators/IPv4/1.2.3.4/general":
         return httpx.Response(404, json={"detail": "not found"})
+    raw_path = request.url.raw_path.split(b"?")[0].decode("ascii")
+    if raw_path == "/api/v1/indicators/url/https%3A%2F%2Fexample.com%2Fa%20path%3Fq%3D1/general":
+        # Matches ONLY when the value was percent-encoded into a single
+        # segment: raw_path keeps the %3F. An unencoded value splits into
+        # path + query and misses this route.
+        return httpx.Response(200, json={"indicator": "https://example.com/a path?q=1"})
+    if path == "/api/v1/pulses/abc123" and request.method == "PATCH":
+        return httpx.Response(200, json={"id": "abc123", "patched": True})
+    if path == "/api/v1/user/me":
+        return httpx.Response(200, json={"user_id": 6755, "username": "self"})
+    if path == "/api/v1/pulses/subscribed_pulse_ids":
+        return httpx.Response(200, json={
+            "results": ["546ce8eb11d40838dc6e43f1"], "count": 42, "next": None,
+        })
+    if path == "/api/v1/pulses/abc123/related":
+        return httpx.Response(200, json={
+            "count": 1, "results": [{"id": "def456", "name": "Related"}],
+        })
+    if path == "/api/v1/pulses/related":
+        supplied = [k for k in ("pulse_id", "malware_family", "adversary") if k in params]
+        assert len(supplied) == 1, "API contract: exactly one selector"
+        return httpx.Response(200, json={
+            "count": 1, "results": [{"id": "rel789", "matched_on": supplied[0]}],
+        })
+    if path == "/api/v1/indicators/update_submitted_urls_tlp":
+        body = json.loads(request.content)
+        assert set(body) == {"urls", "tlp"} and body["tlp"] in ("white", "green", "amber", "red")
+        return httpx.Response(200, json={"updated": len(body["urls"])})
+    if path == "/api/v1/pulses/abc123/clone" and request.method == "POST":
+        assert json.loads(request.content) == {"name": "renamed"}
+        return httpx.Response(200, json={"id": "clone123", "name": "renamed"})
     return httpx.Response(404, json={"detail": f"endpoint not found: {path}"})
 
 

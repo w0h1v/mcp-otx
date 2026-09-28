@@ -4,14 +4,14 @@ An [MCP](https://modelcontextprotocol.io) server for [AlienVault OTX](https://ot
 
 ## What you get
 
-**25 tools** covering the OTX DirectConnect API v1:
+**29 tools** covering the OTX DirectConnect API v1 (20 read tools by default; the 9 write tools require `--read-write`):
 
 | Area | Tools |
 | --- | --- |
 | Search | `search_pulses`, `search_users` |
-| Pulses | `get_pulse_details`, `get_pulse_indicators`, `list_subscribed_pulses`, `list_pulse_activity`, `get_pulse_events`, `create_pulse`, `subscribe_pulse`, `unsubscribe_pulse` |
+| Pulses | `get_pulse_details`, `get_pulse_indicators`, `get_related_pulses`, `search_related_pulses`, `get_subscribed_pulse_ids`, `list_subscribed_pulses`, `list_pulse_activity`, `get_pulse_events`, `create_pulse`, `subscribe_pulse`, `unsubscribe_pulse` |
 | Indicators | `get_indicator_details`, `validate_indicator`, `list_indicator_types`, `export_indicators` |
-| Users | `get_user`, `list_user_pulses`, `list_my_pulses`, `subscribe_user`, `unsubscribe_user`, `follow_user`, `unfollow_user` |
+| Users | `get_user`, `get_current_user`, `list_user_pulses`, `list_my_pulses`, `subscribe_user`, `unsubscribe_user`, `follow_user`, `unfollow_user` |
 | Submissions | `submit_url`, `submit_urls`, `list_submitted_urls`, `list_submitted_files` |
 
 **2 resource templates**: `otx://pulse/{pulse_id}` and `otx://indicator/{type}/{value}`.
@@ -30,7 +30,7 @@ All tools return structured JSON. Long lists are capped at 50 entries with the A
 
 ### API coverage notes
 
-- Destructive account operations (`edit_pulse`, `delete_pulse`, `clone_pulse`, `submit_file` binary upload) are implemented on `otx_mcp.api.client.OTXClient` but **not** exposed as MCP tools, so an LLM can't delete or rewrite your pulses by accident. Call the client directly from Python if you need them.
+- Account operations kept client-only (not exposed as MCP tools): `edit_pulse`, `delete_pulse`, `clone_pulse`, `submit_file` (binary upload), `update_submitted_urls_tlp`, `update_submitted_files_tlp`. Call `otx_mcp.api.client.OTXClient` directly from Python if you need them, so an LLM can't delete or rewrite your pulses by accident.
 - The OTX API is slow on some endpoints (`passive_dns`, `pulses/subscribed` regularly take 20–60 s); the client uses a 60 s timeout.
 
 ## Installation
@@ -57,14 +57,17 @@ cp .env.example .env   # and put your key in it
 | `OTX_MCP_TRANSPORT` | `stdio` | Default transport: `stdio`, `streamable-http`, `sse` |
 | `OTX_MCP_HOST` | `127.0.0.1` | HTTP bind host |
 | `OTX_MCP_PORT` | `8000` | HTTP bind port |
+| `OTX_MCP_READ_WRITE` | off | `1` exposes account-mutating tools (read-only is the default) |
+| `OTX_MCP_BEARER_TOKEN` | off | Require `Authorization: Bearer <token>` on HTTP transports |
 
 ## Running
 
 ### stdio (Claude Desktop, Cline, Claude Code, ...)
 
 ```bash
-otx-mcp                          # or: python -m otx_mcp
-otx-mcp --transport stdio        # explicit
+otx-mcp                          # or: python -m otx_mcp (read-only by default)
+otx-mcp --read-write             # include account-mutating tools
+otx-mcp --transport stdio        # explicit transport
 ```
 
 Client configuration (Claude Desktop `claude_desktop_config.json`):
@@ -87,16 +90,37 @@ otx-mcp --transport streamable-http --host 127.0.0.1 --port 8000
 # → http://127.0.0.1:8000/mcp
 ```
 
-Options: `--json-response` (plain JSON instead of SSE streams), `--stateless-http` (session per request), and legacy `--transport sse` if a client still needs it. There is no built-in auth on the HTTP endpoint — bind to localhost or front it with a proxy if the host is shared.
+Options: `--json-response` (plain JSON instead of SSE streams), `--stateless-http` (session per request), and legacy `--transport sse` if a client still needs it.
+
+**HTTP transport security.** The tools act as your OTX account, so binding them to a network interface is dangerous. Defaults protect you:
+
+- Localhost binds (`127.0.0.1`, the default) are fine as-is.
+- Binding any other host **requires** one of:
+  - `OTX_MCP_BEARER_TOKEN=<secret>` — clients must send `Authorization: Bearer <secret>` or get `401`, or
+  - `--allow-remote` — explicit opt-in to an unauthenticated endpoint (loudly warned).
+
+```bash
+OTX_MCP_BEARER_TOKEN=s3cret otx-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+# client side: pass headers={"Authorization": "Bearer s3cret"} to streamable_http_client
+```
+
+**Read-only mode (default).** The server starts with only the 20 read tools; the 9 tools that mutate your OTX account (`create_pulse`, `subscribe_*`, `unfollow_*`, `follow_*`, `submit_url*`) are omitted. Pass `--read-write` (or set `OTX_MCP_READ_WRITE=1`) when you actually want them — think hard before combining read-write with an LLM client you don't fully control.
+
+**Prompt-injection caveat.** OTX pulse/indicator descriptions are community-authored text that flows into the model's context. The server's instructions tell the model to treat it as data, but treat write-tool output from a read-heavy session with suspicion.
 
 Example remote client:
 
 ```python
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-async with streamable_http_client("http://127.0.0.1:8000/mcp") as (read, write, _):
-    async with ClientSession(read, write) as session:
+# Long read timeouts matter: OTX endpoints like pulses/events and passive_dns
+# can take 10-60s, and the default client read timeout is ~5s.
+http = httpx2.AsyncClient(timeout=httpx2.Timeout(30.0, read=120.0))
+
+async with streamable_http_client("http://127.0.0.1:8000/mcp", http_client=http) as (read, write):
+    async with ClientSession(read, write, read_timeout_seconds=120.0) as session:
         await session.initialize()
         result = await session.call_tool(
             "get_indicator_details",

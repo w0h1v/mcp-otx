@@ -24,7 +24,6 @@ INDICATOR_SECTIONS: dict[str, tuple[str, ...]] = {
     "file": ("general", "analysis"),
     "url": ("general", "url_list", "http_scans", "screenshot"),
     "cve": ("general", "nids_list", "malware"),
-    "nids": ("general",),
     "correlation-rule": ("general",),
 }
 
@@ -36,6 +35,8 @@ INDICATOR_TYPES: tuple[str, ...] = (
     "FileHash-IMPHASH", "CIDR", "FilePath", "Mutex", "CVE", "YARA", "JA3",
     "osquery", "SSLCertFingerprint", "BitcoinAddress",
 )
+
+MAX_RESPONSE_BYTES = 25_000_000  # refuse pathological OTX payloads (25MB)
 
 DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 
@@ -67,7 +68,6 @@ class OTXClient:
                 base_url=self.api_base,
                 headers={"X-OTX-API-KEY": self.api_key, "Accept": "application/json"},
                 timeout=DEFAULT_TIMEOUT,
-                follow_redirects=True,
             )
         return self._client
 
@@ -85,9 +85,22 @@ class OTXClient:
         json_body: Any = None,
         files: dict[str, Any] | None = None,
     ) -> Any:
-        response = await self.http.request(
-            method, path, params=params, json=json_body, files=files
-        )
+        try:
+            response = await self.http.request(
+                method, path, params=params, json=json_body, files=files
+            )
+        except httpx.TimeoutException as e:
+            raise OTXAPIError(
+                f"OTX request timed out on {method} {path}. Some OTX endpoints "
+                "(passive_dns, pulses/subscribed) routinely take 20-60s; retry."
+            ) from e
+        except httpx.RequestError as e:
+            raise OTXAPIError(f"OTX request failed on {method} {path}: {e}") from e
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise OTXAPIError(
+                f"OTX response for {method} {path} exceeds "
+                f"{MAX_RESPONSE_BYTES // 1_000_000}MB; refusing to load it"
+            )
         if response.status_code >= 400:
             try:
                 detail = response.json().get("detail", response.text[:300])
@@ -108,6 +121,11 @@ class OTXClient:
 
     async def patch(self, path: str, body: Any) -> Any:
         return await self._request("PATCH", path, json_body=body)
+
+    @staticmethod
+    def _seg(value: str) -> str:
+        """URL-encode a value into a single safe path segment."""
+        return quote(str(value), safe="")
 
     @staticmethod
     def _page_params(limit: int = 10, page: int = 1) -> dict[str, int]:
@@ -142,11 +160,13 @@ class OTXClient:
         self, indicator: str, indicator_type: str, description: str = ""
     ) -> dict[str, Any]:
         """Validate an indicator value/type pair (used before adding to pulses)."""
-        return await self.get(
+        return await self.post(
             "/pulses/indicators/validate",
-            indicator=indicator,
-            type=indicator_type,
-            description=description or None,
+            {
+                "indicator": indicator,
+                "type": indicator_type,
+                "description": description,
+            },
         )
 
     async def export_indicators(
@@ -168,14 +188,14 @@ class OTXClient:
 
     async def get_pulse_details(self, pulse_id: str) -> dict[str, Any]:
         """Get full metadata for one pulse (includes its indicators)."""
-        return await self.get(f"/pulses/{pulse_id}")
+        return await self.get(f"/pulses/{self._seg(pulse_id)}")
 
     async def get_pulse_indicators(
         self, pulse_id: str, limit: int = 100, page: int = 1, include_inactive: bool = False
     ) -> dict[str, Any]:
         """Get the (paginated) indicator list of a pulse."""
         return await self.get(
-            f"/pulses/{pulse_id}/indicators",
+            f"/pulses/{self._seg(pulse_id)}/indicators",
             limit=max(1, min(limit, 1000)),
             page=max(1, page),
             include_inactive=1 if include_inactive else None,
@@ -192,30 +212,26 @@ class OTXClient:
 
     async def list_pulse_activity(
         self,
-        types: str | None = None,
         limit: int = 10,
         page: int = 1,
         modified_since: str | None = None,
     ) -> dict[str, Any]:
         """List the latest pulses community-wide (the OTX activity stream)."""
         params = self._page_params(limit, page)
-        if types:
-            params["types"] = types
         if modified_since:
             params["modified_since"] = modified_since
         return await self.get("/pulses/activity", **params)
 
     async def get_pulse_events(
         self,
-        action: str | None = None,
         limit: int = 10,
         page: int = 1,
         modified_since: str | None = None,
     ) -> dict[str, Any]:
-        """List subscription stream events (pulse created/edited/deleted...)."""
+        """List subscription stream events (pulse created/edited/deleted...).
+
+        Each event carries an `action` field (e.g. remove_pulse)."""
         params = self._page_params(limit, page)
-        if action:
-            params["action"] = action
         if modified_since:
             params["modified_since"] = modified_since
         return await self.get("/pulses/events", **params)
@@ -254,48 +270,113 @@ class OTXClient:
 
     async def edit_pulse(self, pulse_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """Edit a pulse (PATCH semantics: scalar fields replace, lists add/remove)."""
-        return await self.patch(f"/pulse/{pulse_id}", body)
+        return await self.patch(f"/pulses/{self._seg(pulse_id)}", body)
 
     async def delete_pulse(self, pulse_id: str) -> Any:
         """Delete a pulse owned by the authenticated user."""
-        return await self.post(f"/pulses/{pulse_id}/delete")
+        return await self.post(f"/pulses/{self._seg(pulse_id)}/delete")
 
     async def subscribe_pulse(self, pulse_id: str) -> Any:
-        return await self.post(f"/pulses/{pulse_id}/subscribe")
+        return await self.get(f"/pulses/{self._seg(pulse_id)}/subscribe")
 
     async def unsubscribe_pulse(self, pulse_id: str) -> Any:
-        return await self.post(f"/pulses/{pulse_id}/unsubscribe")
+        return await self.get(f"/pulses/{self._seg(pulse_id)}/unsubscribe")
 
     async def clone_pulse(self, pulse_id: str, new_name: str | None = None) -> Any:
-        return await self.post(f"/pulses/{pulse_id}/clone", name=new_name)
+        return await self.post(
+            f"/pulses/{self._seg(pulse_id)}/clone",
+            {"name": new_name} if new_name else None,
+        )
+
+    async def get_current_user(self) -> dict[str, Any]:
+        """Get the authenticated user's own profile (whoami)."""
+        return await self.get("/user/me")
+
+    async def get_subscribed_pulse_ids(
+        self, limit: int = 500, page: int = 1
+    ) -> dict[str, Any]:
+        """Get just the pulse IDs from your subscriptions (lightweight sync)."""
+        return await self.get(
+            "/pulses/subscribed_pulse_ids", **self._page_params(limit, page)
+        )
+
+    async def get_related_pulses(
+        self, pulse_id: str, limit: int = 10, page: int = 1
+    ) -> dict[str, Any]:
+        """Get pulses that share an indicator with the given pulse."""
+        return await self.get(
+            f"/pulses/{self._seg(pulse_id)}/related", **self._page_params(limit, page)
+        )
+
+    async def search_related_pulses(
+        self,
+        pulse_id: str | None = None,
+        malware_family: str | None = None,
+        adversary: str | None = None,
+        limit: int = 10,
+        page: int = 1,
+    ) -> dict[str, Any]:
+        """Find pulses related to a pulse, malware family, or adversary.
+
+        Exactly one of pulse_id / malware_family / adversary must be given
+        (enforced by the API and validated here).
+        """
+        supplied = [v for v in (pulse_id, malware_family, adversary) if v]
+        if len(supplied) != 1:
+            raise OTXAPIError(
+                "Exactly one of pulse_id, malware_family or adversary is required."
+            )
+        return await self.get(
+            "/pulses/related",
+            pulse_id=pulse_id,
+            malware_family=malware_family,
+            adversary=adversary,
+            **self._page_params(limit, page),
+        )
+
+    async def update_submitted_urls_tlp(self, urls: list[str], tlp: str) -> Any:
+        """Change the TLP of URLs you previously submitted (own submissions only)."""
+        if tlp not in ("white", "green", "amber", "red"):
+            raise OTXAPIError("tlp must be one of: white, green, amber, red")
+        return await self.post("/indicators/update_submitted_urls_tlp", {"urls": urls, "tlp": tlp})
+
+    async def update_submitted_files_tlp(self, files: list[str], tlp: str) -> Any:
+        """Change the TLP of files you previously submitted (own submissions only).
+
+        The official doc's schema block for this route repeats the URLs
+        variant's "urls" key; the semantic key here is the file hash list.
+        """
+        if tlp not in ("white", "green", "amber", "red"):
+            raise OTXAPIError("tlp must be one of: white, green, amber, red")
+        return await self.post("/indicators/update_submitted_files_tlp", {"files": files, "tlp": tlp})
 
     # ------------------------------------------------------------------ users
 
     async def get_user(self, username: str, detailed: bool = True) -> dict[str, Any]:
         """Get a user's profile; detailed=True appends their pulses."""
-        return await self.get(f"/users/{username}", detailed=detailed or None)
+        return await self.get(f"/users/{self._seg(username)}", detailed=detailed or None)
 
     async def list_user_pulses(
         self, username: str, limit: int = 10, page: int = 1
     ) -> dict[str, Any]:
         """List pulses authored by a user."""
-        return await self.get(f"/pulses/user/{username}", **self._page_params(limit, page))
+        return await self.get(f"/pulses/user/{self._seg(username)}", **self._page_params(limit, page))
 
     async def list_my_pulses(self, limit: int = 10, page: int = 1) -> dict[str, Any]:
         """List pulses authored by the authenticated user."""
         return await self.get("/pulses/my", **self._page_params(limit, page))
 
     async def subscribe_user(self, username: str) -> Any:
-        return await self.post(f"/users/{username}/subscribe")
+        return await self.get(f"/users/{self._seg(username)}/subscribe")
 
     async def unsubscribe_user(self, username: str) -> Any:
-        return await self.post(f"/users/{username}/unsubscribe")
+        return await self.get(f"/users/{self._seg(username)}/unsubscribe")
 
     async def follow_user(self, username: str) -> Any:
-        return await self.post(f"/users/{username}/follow")
+        return await self.get(f"/users/{self._seg(username)}/follow")
 
     async def unfollow_user(self, username: str) -> Any:
-        return await self.post(f"/users/{username}/unfollow")
+        return await self.get(f"/users/{self._seg(username)}/unfollow")
 
     # ----------------------------------------------------------------- search
 

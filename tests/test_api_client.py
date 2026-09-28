@@ -28,13 +28,21 @@ async def test_get_pulse_details(client):
     assert pulse["indicators"][0]["indicator"] == "8.8.8.8"
 
 async def test_indicator_url_encoding(client):
-    # URLs must be percent-encoded into a single path segment; the mock has no
-    # route for this indicator, so a 404 OTXAPIError proves the request was
-    # sent as one encoded segment rather than splintering the path.
+    # The mock route only matches when the value was percent-encoded into a
+    # single path segment (its decoded path contains "?q=1"); an unencoded
+    # value splinters into path+query and misses the route (404).
+    data = await client.get_indicator_details(
+        "url", "https://example.com/a path?q=1", "general"
+    )
+    assert data["indicator"] == "https://example.com/a path?q=1"
+
+
+async def test_pulse_id_query_injection_is_encoded(client):
+    # A '?' in pulse_id must be encoded into the segment; the mock's GET-pulse
+    # route asserts no stray query params arrive, and an unencoded value would
+    # turn this request into /pulses/subscribed?x=1 (the subscribed feed).
     with pytest.raises(OTXAPIError, match="404"):
-        await client.get_indicator_details(
-            "url", "https://example.com/a path?q=1", "general"
-        )
+        await client.get_pulse_details("subscribed?x=1")
 
 
 async def test_indicator_general(client):
@@ -73,9 +81,10 @@ async def test_user_endpoints(client):
     assert (await client.subscribe_user("alice")) == {"subscribed": True}
 
 
-async def test_validate_indicator(client):
+async def test_validate_indicator_posts_body(client):
     data = await client.validate_indicator("8.8.8.8", "IPv4")
     assert data["access_type"] == "public"
+    assert data["status"] == "success"
 
 
 async def test_indicator_types(client):
@@ -121,3 +130,90 @@ def test_total_pages():
     assert total_pages({"count": 25}, 10) == 3
     assert total_pages({"count": 0}, 10) == 0
     assert total_pages({"full_size": 10}, 10) == 1
+
+
+async def test_edit_pulse_patches_plural_route(client):
+    data = await client.edit_pulse("abc123", {"name": "renamed"})
+    assert data == {"id": "abc123", "patched": True}
+
+
+async def test_clone_pulse_sends_name_in_body(client):
+    data = await client.clone_pulse("abc123", "renamed")
+    assert data == {"id": "clone123", "name": "renamed"}
+
+
+async def test_timeout_becomes_otx_api_error():
+    import httpx
+
+    from otx_mcp.api.client import OTXClient
+
+    c = OTXClient("k", "https://otx.test/api/v1")
+
+    async def hang(request):
+        raise httpx.ConnectTimeout("too slow")
+
+    c._client = httpx.AsyncClient(transport=httpx.MockTransport(hang))
+    try:
+        with pytest.raises(OTXAPIError, match="timed out"):
+            await c.get_pulse_details("abc123")
+    finally:
+        await c.aclose()
+
+
+async def test_network_error_becomes_otx_api_error():
+    import httpx
+
+    from otx_mcp.api.client import OTXClient
+
+    c = OTXClient("k", "https://otx.test/api/v1")
+
+    async def boom(request):
+        raise httpx.ConnectError("no route to host")
+
+    c._client = httpx.AsyncClient(transport=httpx.MockTransport(boom))
+    try:
+        with pytest.raises(OTXAPIError, match="OTX request failed"):
+            await c.search_pulses("x")
+    finally:
+        await c.aclose()
+
+
+def test_deep_trim_truncates_strings():
+    from otx_mcp.tools.util import deep_trim
+
+    long_text = "A" * 9000
+    out = deep_trim({"whois": long_text})
+    assert out["whois"].startswith("A" * 4000)
+    assert "[truncated, 9000 chars total]" in out["whois"]
+    assert deep_trim("short") == "short"
+
+
+async def test_get_current_user(client):
+    me = await client.get_current_user()
+    assert me["username"] == "self"
+
+
+async def test_subscribed_pulse_ids(client):
+    data = await client.get_subscribed_pulse_ids()
+    assert data["count"] == 42
+    assert data["results"] == ["546ce8eb11d40838dc6e43f1"]
+
+
+async def test_get_related_pulses(client):
+    data = await client.get_related_pulses("abc123")
+    assert data["results"][0]["name"] == "Related"
+
+
+async def test_search_related_pulses_requires_exactly_one_selector(client):
+    with pytest.raises(OTXAPIError, match="Exactly one"):
+        await client.search_related_pulses()
+    with pytest.raises(OTXAPIError, match="Exactly one"):
+        await client.search_related_pulses(pulse_id="abc", adversary="APT1")
+    data = await client.search_related_pulses(malware_family="trickbot")
+    assert data["results"][0]["matched_on"] == "malware_family"
+
+
+async def test_update_submitted_urls_tlp(client):
+    assert await client.update_submitted_urls_tlp(["https://x.example/"], "green") == {"updated": 1}
+    with pytest.raises(OTXAPIError, match="tlp"):
+        await client.update_submitted_urls_tlp(["https://x.example/"], "orange")
