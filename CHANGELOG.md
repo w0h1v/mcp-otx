@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-10-12)
 
 ### Added
 - Published to PyPI as `otx-mcp` (run with `uvx otx-mcp`) and listed on the MCP Registry as `io.github.w0h1v/otx`, both from a release workflow using trusted publishing.

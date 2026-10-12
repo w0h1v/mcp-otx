@@ -6,12 +6,12 @@
     "url": "https://github.com/w0h1v/mcp-otx",
     "source": "github"
   },
-  "version": "1.1.0",
+  "version": "1.2.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "otx-mcp",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
