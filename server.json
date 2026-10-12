@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.w0h1v/otx",
+  "description": "MCP server for AlienVault OTX threat intelligence: indicators, pulses, search, and users.",
+  "repository": {
+    "url": "https://github.com/w0h1v/mcp-otx",
+    "source": "github"
+  },
+  "version": "1.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "otx-mcp",
+      "version": "1.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "OTX_API_KEY",
+          "description": "Your AlienVault OTX API key",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "OTX_MCP_READ_WRITE",
+          "description": "Set to 1 to expose account-mutating tools (create/subscribe/follow/submit). Read-only by default.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

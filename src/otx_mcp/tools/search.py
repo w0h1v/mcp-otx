@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from otx_mcp.api.client import OTXClient
-from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
+from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim, strip_pulse_indicators
 
 
 def register_search_tools(client: OTXClient, mcp: Any) -> None:
@@ -29,7 +29,7 @@ def register_search_tools(client: OTXClient, mcp: Any) -> None:
             data = await client.search_pulses(query, limit, page)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def search_users(query: str, limit: int = 10, page: int = 1) -> dict[str, Any]:

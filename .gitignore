@@ -60,3 +60,8 @@ project.json
 project.yaml
 project.yml
 .pytest_cache/
+
+# MCP registry auth, docs build, tool output
+.mcpregistry_*
+site/
+nanobanana-output/

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
 import sys
 from collections.abc import AsyncIterator
@@ -65,7 +66,9 @@ class BearerAuthMiddleware:
             k.decode("latin-1").lower(): v.decode("latin-1")
             for k, v in scope.get("headers", [])
         }
-        if headers.get("authorization") != f"Bearer {self.token}":
+        supplied = headers.get("authorization", "").encode("utf-8")
+        expected = f"Bearer {self.token}".encode("utf-8")
+        if not hmac.compare_digest(supplied, expected):
             await send({
                 "type": "http.response.start",
                 "status": 401,
