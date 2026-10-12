@@ -1,5 +1,5 @@
 # Build stage: build a wheel from the source tree
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 WORKDIR /src
 RUN pip install --no-cache-dir build
 COPY pyproject.toml README.md LICENSE ./
@@ -7,7 +7,7 @@ COPY src ./src
 RUN python -m build --wheel --outdir /dist
 
 # Runtime stage: the installed package only, no dev dependencies
-FROM python:3.13-slim
+FROM python:3.14-slim
 COPY --from=builder /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl \
     && useradd --system --create-home --uid 10001 otx
