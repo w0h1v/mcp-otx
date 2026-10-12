@@ -80,16 +80,28 @@ async def test_cve_general_configurations_and_lists_capped():
                      {"indicator_type": "cve", "indicator_value": "CVE-2021-44228"})
     cfg = out["configurations"]
     assert cfg["node_count"] == 27
-    assert 0 < len(cfg["cpes"]) <= 20
-    assert len(set(cfg["cpes"])) == len(cfg["cpes"])
-    assert all(c.startswith("cpe:2.3:") for c in cfg["cpes"])
+    assert cfg["affected_count"] == 201 and cfg["platform_count"] == 23
+    assert 0 < len(cfg["affected"]) <= 30 and 0 < len(cfg["platforms"]) <= 10
+    assert all(c.startswith("cpe:2.3:") for c in cfg["affected"] + cfg["platforms"])
     assert cfg["note"]
+    # Version ranges sharing one wildcard CPE must stay separate and bounded,
+    # not collapse into an unbounded "all versions" entry.
+    log4j = [c for c in cfg["affected"] if c.startswith("cpe:2.3:a:apache:log4j:*")]
+    assert log4j[:3] == [
+        "cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:* (>= 2.0.1, < 2.3.1)",
+        "cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:* (>= 2.4.0, < 2.12.2)",
+        "cpe:2.3:a:apache:log4j:*:*:*:*:*:*:*:* (>= 2.13.0, < 2.15.0)",
+    ]
+    # vulnerable: false entries are platform conditions, never listed as affected.
+    assert "cpe:2.3:h:siemens:6bk1602-0aa12-0tp0:-:*:*:*:*:*:*:*" in cfg["platforms"]
+    assert not any(c.startswith("cpe:2.3:h:siemens:6bk1602-0aa12-0tp0:-") for c in cfg["affected"])
     assert len(out["exploits"]) <= 21 and out["exploits_total"] == 30
     assert len(out["references"]) <= 21 and out["references_total"] == 30
     assert len(out["pulse_info"]["references"]) <= 20
     assert out["pulse_info"]["count"] == raw["pulse_info"]["count"]
     assert out["cvss"] == raw["cvss"]
-    assert size(out) < 25_000
+    # Version ranges cost ~1.3k chars over a bare CPE list; correctness wins.
+    assert size(out) < 28_000
 
 
 async def test_small_general_response_passes_through():

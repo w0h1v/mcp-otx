@@ -194,7 +194,7 @@ Sections by indicator type:
 | `url` | `general`, `url_list`, `http_scans`, `screenshot` |
 | `cve` | `general`, `nids_list`, `malware` |
 
-In the `general` section, related pulses are summarized (id, name, author, dates, TLP, tags, malware families, adversary, ATT&CK ids, indicator count) and capped at 10, with the total in `pulse_info.count`. For CVEs, affected configurations are reduced to up to 20 CPE strings, and exploits and references are capped at 20.
+In the `general` section, related pulses are summarized (id, name, author, dates, TLP, tags, malware families, adversary, ATT&CK ids, indicator count) and capped at 10, with the total in `pulse_info.count`. For CVEs, the configuration tree becomes up to 30 affected CPEs, each with its version range (for example `cpe:2.3:a:apache:log4j:* (>= 2.0.1, < 2.3.1)`), and up to 10 platform CPEs: configurations the vulnerable product runs on, which are not affected themselves. Exploits and references are capped at 20.
 
 <details markdown="1">
 <summary>Sample output (IPv4, general): <code>{"indicator_type": "IPv4", "indicator_value": "8.8.8.8", "section": "general"}</code></summary>
@@ -428,6 +428,27 @@ In the `general` section, related pulses are summarized (id, name, author, dates
     "count": 50,
     "pulses": [
       {
+        "id": "6ac9101554900e3ae83df111",
+        "name": "The Scalpel vs. The Sledgehammer: Lessons in Precision Triage from the .conf26 SOC",
+        "author": "AlienVault",
+        "created": "2026-10-09T16:02:29.260000",
+        "modified": "2026-10-12T23:05:38.825000",
+        "TLP": "white",
+        "tags": [
+          "conference network security",
+          "cdn infrastructure",
+          "precision blocking",
+          "… 5 more"
+        ],
+        "attack_ids": [
+          "T1568.002",
+          "T1071.004",
+          "T1071",
+          "… 7 more"
+        ],
+        "indicator_count": 3
+      },
+      {
         "id": "6a99adbec32d94dc6cd05ee1",
         "name": "Chinese-Speaking Operator Uses AI Agents to Target Government and Education Systems Across Asia",
         "author": "AlienVault",
@@ -464,24 +485,12 @@ In the `general` section, related pulses are summarized (id, name, author, dates
         ],
         "indicator_count": 1739
       },
-      {
-        "id": "6acba8a0e726e61bafe8e73e",
-        "name": "Actively_Exploited_Kev | Oct 12, 2026",
-        "author": "LTNA-Australia",
-        "created": "2026-10-11T15:17:52.401000",
-        "modified": "2026-10-11T15:17:52.401000",
-        "TLP": "white",
-        "tags": [
-          "actively_exploited_kev"
-        ],
-        "indicator_count": 1739
-      },
       "… 7 more"
     ],
     "references": [
       "",
-      "hexroot_hONEYPOT-full-2026-09-21-1748.md",
-      "As of Feb 13 (early AM) — Indicators of Compromise: 17K | Types: Email (30), FileHash-SHA256 (2,146), URL (8,070), Hostname (2,755), Domain (3,528), Other (1…",
+      "SHA-256: fc1fedce1419d4e2009828aad8644deca78b4eeed176e5b009797e0eb0d7d3ff — Detected as Win.Malware.Vtflooder / Trojan:Win32/Vflooder; UPX-packed PE32 execut…",
+      "https://vtbehaviour.commondatastorage.googleapis.com/910c6d6b843dae92d9b13230244646f972dfbc3136b8455916c74e8d6da423ac_CAPE%20Sandbox.html?GoogleAccessId=7586…",
       "… 17 more"
     ],
     "related": {
@@ -493,8 +502,8 @@ In the `general` section, related pulses are summarized (id, name, author, dates
         ],
         "industries": [
           "Education",
-          "Telecommunications",
-          "Government"
+          "Government",
+          "Telecommunications"
         ]
       },
       "other": {
@@ -506,8 +515,8 @@ In the `general` section, related pulses are summarized (id, name, author, dates
           "Secbox"
         ],
         "industries": [
-          "Education",
           "Critical_infrastructure",
+          "Energy",
           "Healthcare",
           "… 4 more"
         ]
@@ -515,15 +524,6 @@ In the `general` section, related pulses are summarized (id, name, author, dates
     },
     "pulses_shown": 10,
     "note": "Showing 10 of 50 related pulses; use get_pulse_details for one or search_pulses for more.",
-    "references_total": 58
-  },
-  "false_positive": [],
-  "cve": "CVE-2021-44228",
-  "cvss": {
-    "Access-Complexity": "MEDIUM",
-    "Access-Vector": "NETWORK",
-    "Authentication": "NONE",
-    "Availability-Impact": "COMPLETE",
   … trimmed for the docs
 ```
 

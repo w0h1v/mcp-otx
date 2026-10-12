@@ -42,7 +42,8 @@ def register_indicator_tools(client: OTXClient, mcp: Any) -> None:
             JSON for the requested section. Lists are capped at 50 items with
             counts preserved. In 'general', related pulses are compact
             summaries (max 10; use get_pulse_details for the full pulse) and
-            CVE configurations are summarised as a CPE list.
+            CVE configurations are summarised as affected CPEs with their
+            version ranges, plus platform CPEs (not affected themselves).
         """
         try:
             data = await client.get_indicator_details(indicator_type, indicator_value, section)

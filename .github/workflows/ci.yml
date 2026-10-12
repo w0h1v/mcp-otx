@@ -46,11 +46,7 @@ jobs:
       - run: uv build
       - run: uvx twine check dist/*
       - name: Check the sdist contents
-        run: |
-          tar tzf dist/*.tar.gz
-          if tar tzf dist/*.tar.gz | grep -E '(^|/)(\.env($|\.(?!example))|\.venv/|logs/|project\.)' -P; then
-            echo "::error::sdist contains local files"; exit 1
-          fi
+        run: python3 .github/scripts/check_sdist.py dist/*.tar.gz
 
   audit:
     name: Audit dependencies

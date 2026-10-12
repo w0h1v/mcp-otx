@@ -111,31 +111,67 @@ def _shape_pulse_info(info: dict[str, Any]) -> dict[str, Any]:
     return info
 
 
-def _collect_cpes(node: Any, found: dict[str, None]) -> None:
+AFFECTED_CPE_LIMIT = 30
+PLATFORM_CPE_LIMIT = 10
+_BOUNDS = (
+    ("versionStartIncluding", ">="), ("versionStartExcluding", ">"),
+    ("versionEndIncluding", "<="), ("versionEndExcluding", "<"),
+)
+
+
+def _collect_cpe_matches(node: Any, found: list[dict[str, Any]]) -> None:
     if isinstance(node, dict):
-        for key in ("cpe23Uri", "criteria"):
-            if isinstance(node.get(key), str):
-                found.setdefault(node[key])
+        if any(isinstance(node.get(k), str) for k in ("cpe23Uri", "criteria")):
+            found.append(node)
         for v in node.values():
-            _collect_cpes(v, found)
+            _collect_cpe_matches(v, found)
     elif isinstance(node, list):
         for v in node:
-            _collect_cpes(v, found)
+            _collect_cpe_matches(v, found)
+
+
+def _describe_cpe_match(match: dict[str, Any]) -> str:
+    """CPE plus its version range, e.g. "cpe:2.3:a:apache:log4j:* (>= 2.0.1, < 2.3.1)"."""
+    cpe = match.get("cpe23Uri") or match.get("criteria")
+    bounds = [f"{op} {match[k]}" for k, op in _BOUNDS if match.get(k)]
+    return f"{cpe} ({', '.join(bounds)})" if bounds else cpe
 
 
 def _shape_configurations(cfg: Any) -> Any:
+    """Summarise the NVD configuration tree without losing what matters.
+
+    Each CPE match keeps its version range (several ranges often share one
+    wildcard CPE), and matches marked vulnerable: false are platform
+    conditions ("running on"), so they are listed apart from affected products.
+    Applications come first: they are usually what the CVE is about.
+    """
     if not isinstance(cfg, dict):
         return cfg
     nodes = cfg.get("nodes")
     nodes = nodes if isinstance(nodes, list) else []
-    found: dict[str, None] = {}
-    _collect_cpes(nodes, found)
-    cpes = list(found)
-    note = "Configuration tree summarised."
-    if len(cpes) > SECTION_LIST_LIMIT:
-        note = f"Showing {SECTION_LIST_LIMIT} of {len(cpes)} distinct CPEs."
-    return {"node_count": len(nodes), "cpe_count": len(cpes),
-            "cpes": cpes[:SECTION_LIST_LIMIT], "note": note}
+    matches: list[dict[str, Any]] = []
+    _collect_cpe_matches(nodes, matches)
+    affected: dict[str, None] = {}
+    platforms: dict[str, None] = {}
+    for m in matches:
+        (affected if m.get("vulnerable", True) else platforms).setdefault(_describe_cpe_match(m))
+    affected_list = sorted(affected, key=lambda c: c.split(":")[2:3] != ["a"])
+    platform_list = list(platforms)
+    note = ("Affected CPEs carry their version range; platforms are configurations "
+            "the vulnerable product must run on, not affected themselves. "
+            "AND/OR configuration logic is not shown.")
+    if len(affected_list) > AFFECTED_CPE_LIMIT or len(platform_list) > PLATFORM_CPE_LIMIT:
+        note += (f" Showing {min(len(affected_list), AFFECTED_CPE_LIMIT)} of "
+                 f"{len(affected_list)} affected and {min(len(platform_list), PLATFORM_CPE_LIMIT)} "
+                 f"of {len(platform_list)} platform entries.")
+    return {
+        "node_count": len(nodes),
+        "affected_count": len(affected_list),
+        "platform_count": len(platform_list),
+        "affected": affected_list[:AFFECTED_CPE_LIMIT],
+        "platforms": platform_list[:PLATFORM_CPE_LIMIT],
+        "note": note,
+    }
 
 
 def _compact_entry(entry: Any, dupes: dict[str, str | None]) -> Any:

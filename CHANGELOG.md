@@ -10,7 +10,7 @@
 - LICENSE file (MIT), security policy, contributing guide, code of conduct, citation file, issue and pull request templates.
 
 ### Fixed
-- `get_indicator_details` (section `general`) could return over 200,000 characters, because each related pulse came back in full. Related pulses are now summarized and capped at 10, and CVE configuration data, exploits and references are trimmed, with total counts kept.
+- `get_indicator_details` (section `general`) could return over 200,000 characters, because each related pulse came back in full. Related pulses are now summarized and capped at 10. CVE configurations become a list of affected CPEs with their version ranges, kept separate from platform CPEs (`vulnerable: false`). Exploits and references are trimmed, and total counts are kept.
 - Pulse list tools no longer embed every pulse's indicators; they report `indicator_count` and point to `get_pulse_indicators`.
 
 ### Changed
