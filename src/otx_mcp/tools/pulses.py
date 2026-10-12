@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from otx_mcp.api.client import OTXClient
-from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
+from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim, strip_pulse_indicators
 
 
 def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -> None:
@@ -71,7 +71,7 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
             data = await client.list_subscribed_pulses(limit, page, modified_since)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def list_pulse_activity(
@@ -91,7 +91,7 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
             data = await client.list_pulse_activity(limit, page, modified_since)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def get_pulse_events(
@@ -134,7 +134,7 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
             data = await client.get_related_pulses(pulse_id, limit, page)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def search_related_pulses(
@@ -152,7 +152,10 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
 
         Args:
             pulse_id: Pulse to find related pulses for.
-            malware_family: Malware family name (e.g. "trickbot").
+            malware_family: Malware family name. NOTE: OTX's malware_family
+                filtering is currently unreliable (it returns no results
+                regardless of value); use search_pulses with the family
+                name instead.
             adversary: Adversary name (e.g. "Equation Group").
             limit: Results per page (1-500).
             page: 1-based page number.
@@ -166,7 +169,7 @@ def register_pulse_tools(client: OTXClient, mcp: Any, read_only: bool = False) -
             )
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def get_subscribed_pulse_ids(

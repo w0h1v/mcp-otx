@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from otx_mcp.api.client import INDICATOR_SECTIONS, INDICATOR_TYPES, OTXClient
-from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
+from otx_mcp.tools.util import (
+    OTXAPIError,
+    ToolError,
+    deep_trim,
+    shape_indicator_details,
+)
 
 
 def register_indicator_tools(client: OTXClient, mcp: Any) -> None:
@@ -34,14 +39,16 @@ def register_indicator_tools(client: OTXClient, mcp: Any) -> None:
                 reputation and geo summaries.
 
         Returns:
-            The raw JSON for the requested section (lists capped at 50 items
-            with counts preserved).
+            JSON for the requested section. Lists are capped at 50 items with
+            counts preserved. In 'general', related pulses are compact
+            summaries (max 10; use get_pulse_details for the full pulse) and
+            CVE configurations are summarised as a CPE list.
         """
         try:
             data = await client.get_indicator_details(indicator_type, indicator_value, section)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(shape_indicator_details(data))
 
     @mcp.tool()
     async def validate_indicator(

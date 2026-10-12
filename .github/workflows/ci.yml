@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: ["dependabot/**"]  # Dependabot branches are tested via their PRs
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+
+# Read-only token by default.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test on Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv venv
+      - run: uv pip install ".[dev]"
+      - run: uv run --no-sync pytest
+
+  build:
+    name: Package builds and is clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: uv build
+      - run: uvx twine check dist/*
+      - name: Check the sdist contents
+        run: |
+          tar tzf dist/*.tar.gz
+          if tar tzf dist/*.tar.gz | grep -E '(^|/)(\.env($|\.(?!example))|\.venv/|logs/|project\.)' -P; then
+            echo "::error::sdist contains local files"; exit 1
+          fi
+
+  audit:
+    name: Audit dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: uv venv
+      - run: uv pip install .
+      - name: Audit installed runtime dependencies
+        run: uvx pip-audit --path .venv/lib/python*/site-packages
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: docker build -t mcp-otx .

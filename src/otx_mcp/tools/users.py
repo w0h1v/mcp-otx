@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from otx_mcp.api.client import OTXClient
-from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim
+from otx_mcp.tools.util import OTXAPIError, ToolError, deep_trim, strip_pulse_indicators
 
 
 def register_user_tools(client: OTXClient, mcp: Any, read_only: bool = False) -> None:
@@ -43,7 +43,7 @@ def register_user_tools(client: OTXClient, mcp: Any, read_only: bool = False) ->
             data = await client.list_user_pulses(username, limit, page)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def list_my_pulses(limit: int = 10, page: int = 1) -> dict[str, Any]:
@@ -60,7 +60,7 @@ def register_user_tools(client: OTXClient, mcp: Any, read_only: bool = False) ->
             data = await client.list_my_pulses(limit, page)
         except OTXAPIError as e:
             raise ToolError(str(e)) from e
-        return deep_trim(data)
+        return deep_trim(strip_pulse_indicators(data))
 
     @mcp.tool()
     async def get_current_user() -> dict[str, Any]:

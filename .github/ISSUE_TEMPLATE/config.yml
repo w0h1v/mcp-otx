@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/w0h1v/mcp-otx/security/advisories/new
+    about: Report vulnerabilities privately. Do not open a public issue for them.
+  - name: Problem with OTX itself
+    url: https://otx.alienvault.com/
+    about: Account problems, pulse content and indicator data belong to OTX (LevelBlue). This server only calls the OTX DirectConnect API.
